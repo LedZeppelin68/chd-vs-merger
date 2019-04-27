@@ -23,7 +23,9 @@ namespace chd_vs_merger_test
                 Dictionary<string, ds_gs> dupes = new Dictionary<string, ds_gs>();
 
                 FileStream output = new FileStream(test_file + ".mrg", FileMode.Create);
-                GZipStream gz = new GZipStream(output, CompressionLevel.Optimal);
+                //DeflateStream gz = new DeflateStream(output, CompressionLevel.Optimal);
+
+                BinaryWriter bw = new BinaryWriter(output);
 
                 MemoryStream map = new MemoryStream();
                 BinaryWriter map_bw = new BinaryWriter(map);
@@ -49,7 +51,13 @@ namespace chd_vs_merger_test
                             offsets.offset = (int)output.Position;
 
                             MemoryStream block = new MemoryStream(temp_block);
-                            block.CopyTo(gz);
+
+                            MemoryStream block_compressed = new MemoryStream();
+                            DeflateStream zip = new DeflateStream(block_compressed, CompressionLevel.Optimal);
+                            block.CopyTo(zip);
+                            zip.Close();
+
+                            bw.Write(block_compressed.ToArray());
 
                             offsets.size = (int)(output.Position - size);
                             dupes.Add(temp_block_md5, offsets);
@@ -65,7 +73,6 @@ namespace chd_vs_merger_test
                 File.WriteAllBytes(test_file + ".map", map.ToArray());
 
                 map_bw.Dispose();
-                gz.Dispose();
                 output.Dispose();
             }
         }
