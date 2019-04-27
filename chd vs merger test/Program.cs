@@ -10,8 +10,8 @@ namespace chd_vs_merger_test
     {
         struct ds_gs
         {
-            public int ds_position;
-            public int gs_position;
+            public int offset;
+            public int size;
         }
 
         static void Main(string[] args)
@@ -22,17 +22,11 @@ namespace chd_vs_merger_test
 
                 Dictionary<string, ds_gs> dupes = new Dictionary<string, ds_gs>();
 
-                FileStream fs_for_ds = new FileStream(test_file + ".ds.mrg", FileMode.Create);
-                FileStream gs_for_gs = new FileStream(test_file + ".gs.mrg", FileMode.Create);
+                FileStream output = new FileStream(test_file + ".mrg", FileMode.Create);
+                BinaryWriter output_bw = new BinaryWriter(output);
 
-                DeflateStream ds = new DeflateStream(fs_for_ds, CompressionLevel.Optimal);
-                GZipStream gs = new GZipStream(gs_for_gs, CompressionLevel.Optimal);
-
-                MemoryStream map_ds = new MemoryStream();
-                MemoryStream map_gs = new MemoryStream();
-
-                BinaryWriter writer_map_ds = new BinaryWriter(map_ds);
-                BinaryWriter writer_map_gs = new BinaryWriter(map_gs);
+                MemoryStream map = new MemoryStream();
+                BinaryWriter map_bw = new BinaryWriter(map);
 
                 using (BinaryReader br = new BinaryReader(new FileStream(test_file, FileMode.Open)))
                 {
@@ -44,38 +38,39 @@ namespace chd_vs_merger_test
 
                         if (dupes.ContainsKey(temp_block_md5))
                         {
-                            writer_map_ds.Write(dupes[temp_block_md5].ds_position);
-                            writer_map_gs.Write(dupes[temp_block_md5].gs_position);
+                            map_bw.Write(dupes[temp_block_md5].offset);
+                            map_bw.Write(dupes[temp_block_md5].size);
                         }
                         else
                         {
                             ds_gs offsets = new ds_gs();
-                            int ds_position = (int)ds.BaseStream.Position;
-                            int gs_position = (int)gs.BaseStream.Position;
-                            dupes.Add(temp_block_md5, offsets);
-
-                            writer_map_ds.Write(ds_position);
-                            writer_map_gs.Write(gs_position);
+                            offsets.offset = (int)output_bw.BaseStream.Position;
 
                             MemoryStream block = new MemoryStream(temp_block);
-                            block.CopyTo(ds);
-                            block.Position = 0;
-                            block.CopyTo(gs);
+                            MemoryStream block_compressed = new MemoryStream();
+
+                            GZipStream zip = new GZipStream(block_compressed, CompressionLevel.Optimal);
+                            block.CopyTo(zip);
+
+                            offsets.size = (int)block_compressed.Length;
+                            dupes.Add(temp_block_md5, offsets);
+
+                            map_bw.Write(offsets.offset);
+                            map_bw.Write(offsets.size);
+
+                            block_compressed.Position = 0;
+                            block_compressed.CopyTo(output_bw.BaseStream);
+
+                            zip.Dispose();
                         }
                     }
                 }
 
-                File.WriteAllBytes(test_file + ".ds.map", map_ds.ToArray());
-                File.WriteAllBytes(test_file + ".gs.map", map_gs.ToArray());
+                File.WriteAllBytes(test_file + ".map", map.ToArray());
 
-                writer_map_ds.Dispose();
-                writer_map_gs.Dispose();
+                map_bw.Dispose();
 
-                ds.Dispose();
-                gs.Dispose();
-
-                fs_for_ds.Dispose();
-                gs_for_gs.Dispose();
+                output_bw.Dispose();
             }
         }
 
