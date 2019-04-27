@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -20,6 +21,8 @@ namespace chd_vs_merger_test
             {
                 string test_file = arg;
 
+                string type = GetType(test_file);
+
                 Dictionary<string, ds_gs> dupes = new Dictionary<string, ds_gs>();
 
                 FileStream output = new FileStream(test_file + ".mrg", FileMode.Create);
@@ -31,13 +34,31 @@ namespace chd_vs_merger_test
 
                 long size = 0;
 
+                long i2448_1 = 0;
+                long i2448_2 = 0;
+
                 using (BinaryReader br = new BinaryReader(new FileStream(test_file, FileMode.Open)))
                 {
                     while (br.BaseStream.Position != br.BaseStream.Length)
                     {
-                        byte[] temp_block = br.ReadBytes(512);
+                        byte[] temp_block = new byte[2048];
+                        string temp_block_md5 = string.Empty;
 
-                        string temp_block_md5 = CalcMD5(temp_block);
+                        switch (type)
+                        {
+                            case "2448-1":
+                                br.BaseStream.Seek(i2448_1++ * 2448 + 16, SeekOrigin.Begin);
+                                temp_block = br.ReadBytes(2048);
+                                temp_block_md5 = CalcMD5(temp_block);
+                                br.BaseStream.Seek(384, SeekOrigin.Current);
+                                break;
+                            case "2448-2":
+                                br.BaseStream.Seek(i2448_2++ * 2448 + 16 + 8, SeekOrigin.Begin);
+                                temp_block = br.ReadBytes(2048);
+                                temp_block_md5 = CalcMD5(temp_block);
+                                br.BaseStream.Seek(376, SeekOrigin.Current);
+                                break;
+                        }
 
                         if (dupes.ContainsKey(temp_block_md5))
                         {
@@ -74,6 +95,51 @@ namespace chd_vs_merger_test
                 map_bw.Dispose();
                 output.Dispose();
             }
+        }
+
+        private static string GetType(string test_file)
+        {
+            string type = string.Empty;
+
+            byte[] sync = { 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00 };
+
+            using (BinaryReader br = new BinaryReader(new FileStream(test_file, FileMode.Open)))
+            {
+                bool raw = br.ReadBytes(12).SequenceEqual(sync);
+
+                if (raw)
+                {
+                    br.BaseStream.Position = 2352;
+                    if (br.ReadBytes(12).SequenceEqual(sync))
+                    {
+                        br.BaseStream.Position += 3;
+                        byte mode = br.ReadByte();
+                        switch (mode)
+                        {
+                            case 1:
+                                return "2352-1";
+                            case 2:
+                                return "2352-2";
+                        }
+                    }
+
+                    br.BaseStream.Position = 2448;
+                    if (br.ReadBytes(12).SequenceEqual(sync))
+                    {
+                        br.BaseStream.Position += 3;
+                        byte mode = br.ReadByte();
+                        switch (mode)
+                        {
+                            case 1:
+                                return "2448-1";
+                            case 2:
+                                return "2448-2";
+                        }
+                    }
+                }
+            }
+
+            return "512";
         }
 
         private static string CalcMD5(byte[] temp_block)
