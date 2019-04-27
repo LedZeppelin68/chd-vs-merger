@@ -23,7 +23,6 @@ namespace chd_vs_merger_test
                 Dictionary<string, ds_gs> dupes = new Dictionary<string, ds_gs>();
 
                 FileStream output = new FileStream(test_file + ".mrg", FileMode.Create);
-                //DeflateStream gz = new DeflateStream(output, CompressionLevel.Optimal);
 
                 BinaryWriter bw = new BinaryWriter(output);
 
