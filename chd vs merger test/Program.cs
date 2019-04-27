@@ -23,10 +23,12 @@ namespace chd_vs_merger_test
                 Dictionary<string, ds_gs> dupes = new Dictionary<string, ds_gs>();
 
                 FileStream output = new FileStream(test_file + ".mrg", FileMode.Create);
-                BinaryWriter output_bw = new BinaryWriter(output);
+                GZipStream gz = new GZipStream(output, CompressionLevel.Optimal);
 
                 MemoryStream map = new MemoryStream();
                 BinaryWriter map_bw = new BinaryWriter(map);
+
+                long size = 0;
 
                 using (BinaryReader br = new BinaryReader(new FileStream(test_file, FileMode.Open)))
                 {
@@ -44,24 +46,18 @@ namespace chd_vs_merger_test
                         else
                         {
                             ds_gs offsets = new ds_gs();
-                            offsets.offset = (int)output_bw.BaseStream.Position;
+                            offsets.offset = (int)output.Position;
 
                             MemoryStream block = new MemoryStream(temp_block);
-                            MemoryStream block_compressed = new MemoryStream();
+                            block.CopyTo(gz);
 
-                            GZipStream zip = new GZipStream(block_compressed, CompressionLevel.Optimal);
-                            block.CopyTo(zip);
-
-                            offsets.size = (int)block_compressed.Length;
+                            offsets.size = (int)(output.Position - size);
                             dupes.Add(temp_block_md5, offsets);
 
                             map_bw.Write(offsets.offset);
                             map_bw.Write(offsets.size);
 
-                            block_compressed.Position = 0;
-                            block_compressed.CopyTo(output_bw.BaseStream);
-
-                            zip.Dispose();
+                            size = output.Position;
                         }
                     }
                 }
@@ -69,8 +65,8 @@ namespace chd_vs_merger_test
                 File.WriteAllBytes(test_file + ".map", map.ToArray());
 
                 map_bw.Dispose();
-
-                output_bw.Dispose();
+                gz.Dispose();
+                output.Dispose();
             }
         }
 
